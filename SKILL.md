@@ -2,7 +2,7 @@
 name: kuaishou-user-insight
 description: "快手用户需求洞察与产品机会分析技能，适用于基于快手公开数据的新产品开发、营销策划、品类切入前的市场分析；适用于基于数据分析的洞察到创业落地框架：用户画像识别、情绪动机挖掘、洞察转机会、创业落地；帮你快速理解目标用户、挖掘情绪动机、把洞察转成可落地的产品机会。支持三大能力：(1) 关键词搜索视频，可按点赞数、发布时间、视频时长筛选排序；(2) 达人作品抓取，按主页链接获取公开作品列表；(3) 视频评论分析，按视频链接获取评论内容与互动数据。"
 license: MIT
-version: "1.1.0"
+version: 1.1.1
 metadata:
   openclaw:
     emoji: "📷"
@@ -13,14 +13,13 @@ metadata:
       env:
         - GUAIKEI_API_TOKEN
   enabled: true
-  version: "1.1.0"
   type: command
   runtime: "nodejs@16.14.0+"
   requires:
     bins: ["node"]
     env: ["GUAIKEI_API_TOKEN"]
   env_desc:
-    GUAIKEI_API_TOKEN: "快手数据 API 访问令牌。未配置时无法调用接口；可通过 https://www.guaikei.com 开通，或联系开发者（微信 13395823479，备注：快手技能）。"
+    GUAIKEI_API_TOKEN: "快手数据 API 访问令牌。未配置时无法调用接口；可通过 https://www.guaikei.com 开通。"
   keywords:
     - "快手"
     - "Kuaishou"
@@ -81,7 +80,7 @@ metadata:
   examples:
     - "帮我搜快手里「具身智能」的高赞视频 → node scripts/kuaishou/search-cli.js --keyword \"具身智能\" --sort 2 --limit 20"
     - "最近一周最新的快手 AI 教程，要 20 条 → node scripts/kuaishou/search-cli.js --keyword \"AI 教程\" --sort 1 --time 7 --limit 20"
-    - "这条快手视频评论区在说什么 → node scripts/kuaishou/comment-cli.js --url \"https://www.kuaishou.com/short-video/3xabc\" --limit 100"
+    - "这条快手视频评论区在说什么 → node scripts/kuaishou/comment-cli.js --url \"https://www.kuaishou.com/short-video/3xabc\" --limit 40"
     - "这个快手博主最近 20 条作品 → node scripts/kuaishou/post-cli.js --url \"https://www.kuaishou.com/profile/3xabc\" --sort 0 --limit 20"
     - "这个快手博主多少粉丝 → node scripts/kuaishou/post-cli.js --url 123456 --limit 0"
 ---
@@ -101,7 +100,7 @@ metadata:
 
 ## 0. 每次按这个顺序执行
 
-1. 确认环境变量 `GUAIKEI_API_TOKEN` 已配置。没有配置时直接告诉用户去 [快手数据 API](https://www.guaikei.com) 开通，不要先跑一遍试探。
+1. 确认环境变量 `GUAIKEI_API_TOKEN` 已配置。没有配置时直接告诉用户去 [快手用户需求洞察与产品机会分析](https://www.guaikei.com) 开通，不要先跑一遍试探。
 2. 在本技能根目录执行 `node scripts/kuaishou/<命令>.js`。
 3. stderr 出现「处理中」表示任务还在跑。等进程自己退出，再读 stdout 的最后一份 JSON。不要把 stderr 或整份 JSON 念给用户。
 4. 按「4. 读结果」的退出码表决定：改参数再试、告诉用户，或停止。
@@ -111,9 +110,11 @@ metadata:
 同一组参数再次执行时，搜索、作品和评论大约 20 分钟内会复用已有任务。等到 `TIMEOUT` 后再立刻重跑，通常仍落在这个窗口里。
 
 - 没有关键词或链接就先问，不要编造
-- 搜索不传 `--limit` 是 10 条。用户说「全部」再加大，不要自行抓 10000 条
+- 搜索不传 `--limit` 是 10 条。用户说「全部」再加大，不要自行抓 10000 条。用户未说明套餐时优先默认 10；需要更多时先说明可能受套餐限制
 - `status=empty` 且退出码 0 是「没有结果」，不是命令失败
 - 这个技能没有视频详情命令。视频链接只能拉评论
+
+**套餐双上限（重要）**：技能侧硬上限为 10000（按量 Token）。**包月 Token** 超限会返回 `PLAN_LIMIT`（后端 errcode 14），不要当网络错误重试：搜索最多 **30**，作品最多 **50**，评论最多 **60**。具体以官网与本次 `message` 为准。
 
 ## 1. 什么时候调用
 
@@ -168,7 +169,7 @@ metadata:
 | `--sort` `-s` | 否 | `0` 综合 / `1` 最新 / `2` 最多点赞 | `0` |
 | `--time` `-t` | 否 | `0` 不限 / `1` 近 1 日 / `7` 近 7 日 / `30` 近 1 月 | `0` |
 | `--duration` `-d` | 否 | `0` 不限 / `1` 1 分钟内 / `2` 1–5 分钟 / `3` 超过 5 分钟 | `0` |
-| `--limit` `-l` | 否 | 整数 1–10000 | `10` |
+| `--limit` `-l` | 否 | 整数 1–10000（**包月 Token 实际最多 30**） | `10` |
 
 ### 3.2 博主作品
 
@@ -176,14 +177,14 @@ metadata:
 | --- | --- | --- | --- |
 | `--url` `-u` | 是 | 主页链接或纯数字 `user_id`，最长 255 | — |
 | `--sort` `-s` | 否 | `0` 最新 / `1` 最热 | `1` |
-| `--limit` `-l` | 否 | 整数 0–10000。`0` 只要博主信息 | `10` |
+| `--limit` `-l` | 否 | 整数 0–10000（**包月最多 50**；`0` 只要博主信息） | `10` |
 
 ### 3.3 视频评论
 
 | 参数 | 必填 | 取值 | 默认 |
 | --- | --- | --- | --- |
 | `--url` `-u` | 是 | 视频链接、短链或 `3x` 视频 id，最长 255 | — |
-| `--limit` `-l` | 否 | 整数 1–10000 | `10` |
+| `--limit` `-l` | 否 | 整数 1–10000（**包月最多 60**） | `10` |
 
 ## 4. 读结果
 
@@ -196,7 +197,7 @@ metadata:
   "message": "搜索任务完成",
   "timestamp": "2026/10/26 16:20:00",
   "request": { "command": "search", "keyword": "具身智能", "sort": 2, "time": 0, "duration": 0, "limit": 20 },
-  "metadata": { "skill_version": "1.1.0", "runtime_version": "22.22.2", "execution_time": 8421 },
+  "metadata": { "skill_version": "1.1.1", "runtime_version": "22.22.2", "execution_time": 8421 },
   "results": [{ "id": "3xabc", "caption": "..." }]
 }
 ```
@@ -214,6 +215,7 @@ metadata:
 | 2 | `INVALID_ARGS` / `INVALID_KEYWORD` | 按上一节改参数后再试一次。关键词缺失或是链接时先问用户 |
 | 1 | `INVALID_URL` | 按路由换命令，或向用户确认这是视频还是主页 |
 | 3 | `AUTH_REQUIRED` / `AUTH_ERROR` | 停止重试，让用户配置 `GUAIKEI_API_TOKEN` |
+| 1 | `PLAN_LIMIT` | 套餐单次条数超限（常见于包月 Token）。**禁止同参重试**。转述 `message`；可建议降低 `--limit`（搜索≤30，作品≤50，评论≤60）或到官网升级按量；**须用户同意后再跑**。禁止擅自加大 limit |
 | 1 | `TIMEOUT` | 任务仍在处理。大约 20 分钟内用同一组参数重跑会复用已有任务。宿主提前结束进程时不要立刻连打 |
 | 1 | `NETWORK_ERROR` / `HTTP_5xx` / `HTTP_429` | 命令内部已经重试过。退出后再失败就告诉用户稍后再试，不要立刻连打 |
 | 1 | 十进制数字，例如 `"12"` | 把 `message` 原样转告。不要把 `"1"` 当成业务失败，那是处理中，命令会自己等 |
@@ -227,4 +229,4 @@ metadata:
 
 成功结果默认不写文件。需要留底时设置 `KS_GUAIKEI_ENABLE_LOG=1`，文件写到系统临时目录的 `kuaishou-guaikei/logs/`。POSIX 上权限是仅当前用户可读写；Windows 不使用这组权限位，靠临时目录本身的用户隔离。
 
-开通 token 或人工支持：[快手实时数据获取技能官网](https://www.guaikei.com) ，微信 `13395823479`（备注：快手技能）。
+开通 token 或人工支持：[快手用户需求洞察与产品机会分析官网](https://www.guaikei.com)。
